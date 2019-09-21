@@ -1,0 +1,70 @@
+import RPi.GPIO as GPIO
+from lib_nrf24 import NRF24
+import time
+import spidev
+from urllib.request import urlopen
+
+GPIO.setmode(GPIO.BCM)
+
+baseURL = "https://api.thingspeak.com/update?api_key=MJYZBXJB8SPYJFTU"
+
+pipes = [[0xE8, 0xE8, 0xF0, 0xF0, 0xE1], [0xF0, 0xF0, 0xF0, 0xF0, 0xE1]]
+
+radio = NRF24(GPIO, spidev.SpiDev())
+radio.begin(0, 17)
+
+radio.setPayloadSize(32)
+radio.setChannel(0x55)
+radio.setDataRate(NRF24.BR_1MBPS)
+radio.setPALevel(NRF24.PA_MIN)
+
+radio.setAutoAck(True)
+radio.enableDynamicPayloads()
+radio.enableAckPayload()
+
+radio.openReadingPipe(1, pipes[1])
+#radio.printDetails()
+radio.startListening()
+
+l1 = []
+l2 = []
+j=1
+
+while(j<=40):
+    ackPL = [1]
+    while not radio.available(0):
+        time.sleep(1 / 100)
+    receivedMessage = []
+    radio.read(receivedMessage, radio.getDynamicPayloadSize())
+    print("Received: {}".format(receivedMessage))
+
+    print("Translating the receivedMessage into unicode characters")
+    string = ""
+    for n in receivedMessage:
+        # Decode into standard unicode set
+        if (n >= 32 and n <= 126):
+            string += chr(n)
+    print("Out received message decodes to: {}".format(string))
+    string = string.split('#')
+    temp = string[0]
+    light = string[1]
+    moist = string [2]
+
+    tempf = float(temp)
+    lightf = float(light)
+    moistf = float(moist)
+
+    print("Temperature = ",tempf, "Light = ",lightf, "Moisture = ",moistf)
+
+    try:
+        conn = urlopen(baseURL+'&field1='+str(tempf)+'&field2='+str(lightf)+'&field3='+str(moistf))
+        print(conn.read())
+        conn.close()
+    except Exception as e:
+        print(e)
+    l1.append(string)
+    j+=1
+    time.sleep(15)
+for i in range(len(l1)):
+    l2.append(l1[i][0])
+    
